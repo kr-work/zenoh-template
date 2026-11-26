@@ -1,0 +1,17 @@
+// ピアモードの設定。ルーターなしで、同じ LAN の Zenoh アプリどうしが直接つながる。
+// 使い方:  uv run sub.py -c ../config/peer.json5
+{
+  mode: "peer",
+
+  scouting: {
+    // 同じセグメントにいるピア・ルーターを UDP マルチキャストで自動発見する。
+    multicast: {
+      enabled: true,
+    },
+  },
+
+  // ルーターに必ずつなぎたいときは connect を足す(発見とは別に、明示的に接続する)。
+  // connect: {
+  //   endpoints: ["tcp/192.168.1.10:7447"],
+  // },
+}

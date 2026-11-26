@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.ruff_cache/
+
+# Rust
+rust/target/
+
+# C / CMake (zenoh-pico desktop)
+pico/desktop/build/
+build/
+
+# PlatformIO (zenoh-pico ESP32)
+pico/esp32/.pio/
+pico/esp32/include/secrets.h
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

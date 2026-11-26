@@ -1,0 +1,47 @@
+# rmw_zenoh(ROS 2 の通信を Zenoh で行う RMW)で talker / listener を動かす。
+#
+#   cd ros2/rmw_zenoh
+#   docker compose up --build
+#
+# rmw_zenoh では、ノードどうしが互いを見つけるために Zenoh ルーター(rmw_zenohd)が要る。
+# ここでは zenohd コンテナのネットワーク名前空間をノードと共有し、1 台のホストに見立てている。
+# ノードは既定の設定どおり tcp/localhost:7447 のルーターに接続する。
+#
+# ホスト側での確認(python ディレクトリで):
+#   uv run ros2_rmw_zenoh.py graph    # ノードとトピックの一覧
+#   uv run ros2_rmw_zenoh.py listen   # talker の /chatter を受信
+#   uv run ros2_rmw_zenoh.py talk     # listener コンテナに "I heard: ..." が出る
+
+x-ros: &ros
+  build: ../docker
+  image: zenoh-template/ros2:jazzy
+
+services:
+  zenohd:
+    <<: *ros
+    command: ros2 run rmw_zenoh_cpp rmw_zenohd
+    environment:
+      # 既定の待ち受け tcp/[::]:7447 は IPv6 が無効な環境で失敗するので、IPv4 で待ち受ける
+      ZENOH_CONFIG_OVERRIDE: 'listen/endpoints=["tcp/0.0.0.0:7447"]'
+      RUST_LOG: zenoh=info
+    ports:
+      - "7447:7447/tcp"
+
+  talker:
+    <<: *ros
+    network_mode: "service:zenohd"
+    depends_on: [zenohd]
+    environment:
+      RMW_IMPLEMENTATION: rmw_zenoh_cpp
+      # ルーターが立ち上がるまで最大 10 回(1 秒おき)待つ
+      ZENOH_ROUTER_CHECK_ATTEMPTS: "10"
+    command: ros2 run demo_nodes_cpp talker
+
+  listener:
+    <<: *ros
+    network_mode: "service:zenohd"
+    depends_on: [zenohd]
+    environment:
+      RMW_IMPLEMENTATION: rmw_zenoh_cpp
+      ZENOH_ROUTER_CHECK_ATTEMPTS: "10"
+    command: ros2 run demo_nodes_cpp listener

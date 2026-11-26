@@ -1,0 +1,33 @@
+// zenoh-bridge-ros2dds の設定。
+// 全項目の説明: https://github.com/eclipse-zenoh/zenoh-plugin-ros2dds/blob/1.10.2/DEFAULT_CONFIG.json5
+{
+  // ブリッジは既定でルーターとして動き、7447/tcp で他のブリッジや Zenoh アプリからの接続を待つ。
+  // 既定の待ち受けは IPv6 の [::]:7447 なので、IPv6 が無効なコンテナでも動くよう IPv4 を明示する。
+  mode: "router",
+  listen: {
+    endpoints: ["tcp/0.0.0.0:7447"],
+  },
+
+  plugins: {
+    ros2dds: {
+      // ロボットごとに namespace を付けると、Zenoh 側のキーの先頭に付く(/cmd_vel -> bot1/cmd_vel)。
+      // ROS 2 ノード側に namespace を設定する必要はない。
+      // namespace: "/bot1",
+
+      // DDS のドメイン ID。省略すると ROS_DOMAIN_ID 環境変数(なければ 0)を使う。
+      // domain: 0,
+
+      // Zenoh に流すインターフェースを絞る(正規表現)。allow と deny はどちらか一方だけ書ける。
+      // deny: {
+      //   publishers: ["/rosout", "/parameter_events"],
+      // },
+
+      // 帯域の大きいトピックを間引く(Hz)。無線越しに映像や点群を流すときに使う。
+      // pub_max_frequencies: [".*/image_raw=5", ".*/points=2"],
+    },
+
+    // REST プラグインを有効にすると、ブリッジが見つけたノードや経路を HTTP で確認できる。
+    //   curl http://localhost:8000/@/local/ros2/node/**
+    // rest: { http_port: 8000 },
+  },
+}

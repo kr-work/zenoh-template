@@ -1,0 +1,17 @@
+# Zenoh ルーター(zenohd)を 1 台起動する。
+#   docker compose up -d
+# 起動後、ホストのアプリからは tcp/localhost:7447 に接続できる。
+# REST API: http://localhost:8000/demo/**
+services:
+  zenohd:
+    image: eclipse/zenoh:1.10.2
+    container_name: zenohd
+    restart: unless-stopped
+    command: ["-c", "/zenoh/router.json5"]
+    environment:
+      RUST_LOG: zenoh=info
+    volumes:
+      - ./config/router.json5:/zenoh/router.json5:ro
+    ports:
+      - "7447:7447/tcp"   # Zenoh
+      - "8000:8000/tcp"   # REST プラグイン

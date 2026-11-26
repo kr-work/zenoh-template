@@ -1,0 +1,70 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync
+      - run: uv run ruff check .
+      - name: pub/sub と get/queryable のスモークテスト
+        run: |
+          uv run sub.py -l tcp/127.0.0.1:7450 --no-multicast-scouting > sub.log 2>&1 &
+          uv run queryable.py -l tcp/127.0.0.1:7451 --no-multicast-scouting > q.log 2>&1 &
+          sleep 3
+          uv run pub.py -e tcp/127.0.0.1:7450 --no-multicast-scouting -n 3 --interval 0.5
+          uv run get.py -e tcp/127.0.0.1:7451 --no-multicast-scouting -t 3 | tee get.log
+          sleep 1
+          cat sub.log
+          grep -q "Hello from Python" sub.log
+          grep -q "python queryable" get.log
+
+  rust:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+      - run: cargo build --release
+      - run: cargo clippy --release -- -D warnings
+
+  pico-desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake -S pico/desktop -B pico/desktop/build -DCMAKE_BUILD_TYPE=Release
+      - run: cmake --build pico/desktop/build --config Release
+
+  pico-esp32:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/pip
+            ~/.platformio/.cache
+          key: ${{ runner.os }}-pio
+      - run: pip install platformio
+      - run: cp pico/esp32/include/secrets.example.h pico/esp32/include/secrets.h
+      - run: pio run -d pico/esp32

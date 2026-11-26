@@ -1,0 +1,45 @@
+# DDS(CycloneDDS)で動く ROS 2 ノードと zenoh-bridge-ros2dds をまとめて起動する。
+#
+#   cd ros2/bridge
+#   docker compose up --build
+#
+# bridge コンテナのネットワーク名前空間を ROS 2 ノードと共有し、「ロボット 1 台」に見立てている。
+# ロボットの中の通信は DDS のまま、外(ホスト)からは 7447/tcp の Zenoh として見える。
+#
+# ホスト側での確認(python ディレクトリで):
+#   uv run ros2_bridge.py listen      # talker の /chatter を受信
+#   uv run ros2_bridge.py talk        # listener コンテナに "I heard: ..." が出る
+#   uv run ros2_bridge.py cmd_vel     # cmd_vel_echo コンテナに Twist が出る
+
+x-ros: &ros
+  build: ../docker
+  image: zenoh-template/ros2:jazzy
+  network_mode: "service:bridge"
+  depends_on: [bridge]
+  environment:
+    RMW_IMPLEMENTATION: rmw_cyclonedds_cpp
+    ROS_DOMAIN_ID: "0"
+
+services:
+  bridge:
+    image: eclipse/zenoh-bridge-ros2dds:1.10.2
+    command: ["-c", "/config/bridge.json5"]
+    environment:
+      ROS_DOMAIN_ID: "0"
+      RUST_LOG: zenoh=info
+    volumes:
+      - ./bridge.json5:/config/bridge.json5:ro
+    ports:
+      - "7447:7447/tcp"
+
+  talker:
+    <<: *ros
+    command: ros2 run demo_nodes_cpp talker
+
+  listener:
+    <<: *ros
+    command: ros2 run demo_nodes_cpp listener
+
+  cmd_vel_echo:
+    <<: *ros
+    command: ros2 topic echo /cmd_vel geometry_msgs/msg/Twist

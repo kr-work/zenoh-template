@@ -1,0 +1,20 @@
+[package]
+name = "zenoh-template"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75"
+description = "Zenoh の Rust サンプル(pub/sub, query/queryable)"
+publish = false
+
+[dependencies]
+# ルーターや他言語のライブラリとバージョンをそろえる
+zenoh = "1.10.2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "time", "signal"] }
+clap = { version = "4", features = ["derive"] }
+serde_json = "1"
+
+# src/bin/*.rs がそれぞれ実行ファイルになる:
+#   cargo run --bin pub -- -e tcp/127.0.0.1:7447
+#   cargo run --bin sub
+#   cargo run --bin queryable
+#   cargo run --bin get
