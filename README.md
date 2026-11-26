@@ -80,7 +80,7 @@ zenoh-template/
 
 `pico/desktop` は Windows でもビルドできます(Visual Studio の C コンパイラと CMake が必要です)。生成された実行ファイルは `build\Debug\pico_sub.exe` のように構成名のフォルダーに入ります。
 
-`pico/esp32` のビルドにも、PC 側に CMake と C コンパイラが要ります。zenoh-pico のビルドスクリプトが、ビルドのたびに PC 上で cmake を実行して設定ヘッダーを生成するためです。
+`pico/esp32` のビルドにも、PC 側に CMake と C/C++ のコンパイラが要ります。zenoh-pico のビルドスクリプトが、ビルドのたびに PC 上で cmake を実行して設定ヘッダーを生成するためです。
 
 ## ROS 2 とつなぐ
 
@@ -106,3 +106,20 @@ Zenoh のバージョンは次の箇所で 1.10.2 に固定しています。上
 - キーの先頭の `demo/` を、プロジェクトの名前に置き換えます。キーは `/` 区切りの階層なので、`<プロジェクト>/<装置>/<データの種類>` のように決めておくと、ワイルドカードで購読しやすくなります。
 - `.github/workflows/ci.yml` は Python のスモークテスト、Rust のビルド、zenoh-pico の PC 向けビルド(Linux と Windows)、ESP32 向けビルドを実行します。使わない言語のジョブは削除してください。
 - ライセンスファイルは入れていません。公開するときは用途に合わせて追加してください。Zenoh 本体は EPL-2.0 と Apache-2.0 のデュアルライセンスです。
+
+## 動作確認の状況(2026-11-26、Zenoh 1.10.2)
+
+確認したこと:
+
+- Python・Rust・zenoh-pico(Linux でビルド)のあいだで、ルーター経由の pub/sub と get/queryable が双方向に通る
+- ルーターの REST プラグインとメモリストレージが起動し、`curl http://localhost:8000/demo/hello/**` で最新値が返る
+- `ros2/bridge/`:ROS 2 Jazzy(CycloneDDS)の talker → Zenoh、Zenoh → listener、Zenoh(Python と zenoh-pico)→ `/cmd_vel` が届く
+- `ros2/rmw_zenoh/`:`ros2_rmw_zenoh.py` の graph・listen・talk が動き、talk の送信を ROS 2 の listener が受信する
+- Rust は `cargo build --release` と `cargo clippy -- -D warnings` が通る
+- `pico/esp32` は PlatformIO で `esp32dev` 向けのビルドが通る(RAM 13.7%、Flash 62.6%)
+
+確認していないこと:
+
+- ESP32 の実機での動作(書き込みと Wi-Fi 接続)
+- `pico/desktop` の Windows(MSVC)でのビルド
+- GitHub Actions 上での CI の実行

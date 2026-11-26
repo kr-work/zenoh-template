@@ -37,7 +37,8 @@ def main() -> None:
         try:
             for i in counter:
                 msg = args.payload if args.raw else f"[{i:4d}] {args.payload}"
-                pub.put(msg)
+                # エンコーディングはメタデータ。text/plain にしておくと REST API が文字列のまま返す
+                pub.put(msg, encoding=zenoh.Encoding.TEXT_PLAIN)
                 print(f"-> {args.key}: {msg}")
                 time.sleep(args.interval)
         except KeyboardInterrupt:

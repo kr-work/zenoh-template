@@ -26,6 +26,8 @@ services:
     command: ["-c", "/config/bridge.json5"]
     environment:
       ROS_DOMAIN_ID: "0"
+      # ブリッジは ROS_DISTRO で Humble 以前かどうかを判断する(未設定だと iron とみなして警告を出す)
+      ROS_DISTRO: jazzy
       RUST_LOG: zenoh=info
     volumes:
       - ./bridge.json5:/config/bridge.json5:ro

@@ -1,6 +1,6 @@
 # Zenoh 入門:zenoh-pico でマイコンをつなぎ、ROS 2 と接続するまで
 
-2026 年 11 月時点の Zenoh 1.10.2 で確認した内容です。
+2026 年 11 月時点の Zenoh 1.10.2 で確認した内容です。サンプルは、Python・Rust・zenoh-pico(Linux)のあいだの通信と、ROS 2 Jazzy のブリッジ構成・rmw_zenoh 構成で動作を確かめています。ESP32 のサンプルはビルドまで確認し、実機では動かしていません。
 
 Zenoh は、pub/sub と問い合わせ(query)を同じキーの体系で扱える通信ミドルウェアです。端末どうしがルーターなしで直接つながる構成から、ルーターを経由して拠点やクラウドをまたぐ構成まで、アプリのコードを変えずに組めます。マイコン向けの C 実装である zenoh-pico を使えば ESP32 のような小さな機器も同じネットワークに参加でき、ROS 2 とは DDS ブリッジ(zenoh-bridge-ros2dds)と RMW 実装(rmw_zenoh)の 2 通りの方法でつながります。
 
@@ -179,6 +179,8 @@ curl.exe http://localhost:8000/demo/hello/**
 
 PowerShell 5.1 では `curl` が Invoke-WebRequest の別名になっているので、`curl.exe` と書いています。
 
+結果はキー・値・エンコーディング・タイムスタンプを並べた JSON の配列です。値が文字列のまま入るのは、エンコーディングが `text/plain` のようなテキストのときだけで、それ以外は base64 にした文字列が入ります。テンプレートの `pub.py` は `pub.put(msg, encoding=zenoh.Encoding.TEXT_PLAIN)` と明示しているので、文字列のまま返ります。
+
 ## 5. zenoh-pico でマイコンをつなぐ
 
 ### zenoh-pico は C で書かれた Zenoh の実装
@@ -197,7 +199,7 @@ zenoh-pico の API を読むときに押さえておきたいのは、値の持�
 | `z_loaned_xxx_t` | 借りている参照 | `z_loan(x)` で作って関数に渡す。所有権は移らない |
 | `z_moved_xxx_t` | 所有権を渡す途中の値 | `z_move(x)` で作る。渡したあとの `x` は使わない |
 
-このほかに、文字列などをコピーせずに参照する `z_view_xxx_t`(例:`z_view_keyexpr_t`)があります。`z_loan` や `z_move` は、C11 の `_Generic` で型ごとの関数に振り分けるマクロです。C++ では同じ名前のオーバーロード関数が用意されているので、Arduino のコードでも同じように書けます。
+このほかに、文字列などをコピーせずに参照する `z_view_xxx_t`(例:`z_view_keyexpr_t`)があります。`z_loan` や `z_move` は、C11 の `_Generic` で型ごとの関数に振り分けるマクロです。C++ 向けには同じ名前のオーバーロード関数が用意されています。ただし、これらは C99 でビルドする環境では定義されません。PlatformIO の Arduino ESP32 ビルドがこれに当たるので、その場合は `z_session_loan(&s)` や `z_bytes_move(&payload)` のように、型ごとの関数を直接呼びます。
 
 publish の流れは次のとおりです([pico/desktop/src/pico_pub.c](../pico/desktop/src/pico_pub.c) を短くしたもの)。
 
@@ -269,7 +271,9 @@ build_flags = -DZENOH_COMPILER_GCC
 
 `lib_ldf_mode = deep` と `-DZENOH_COMPILER_GCC` は、zenoh-pico の Arduino 向け CI と同じ設定です。espressif32 のバージョンは、zenoh-pico の ESP-IDF 向け CI が 6.13.0 に固定しているのに合わせました。CI のコメントによると、espressif32 7.0.0 が持ち込む ESP-IDF 6.0 で PlatformIO との組み合わせに問題が出るためです。
 
-PlatformIO でビルドするときは、PC に CMake と C コンパイラが必要です。zenoh-pico のビルドスクリプト(`extra_script.py`)が、ビルドのたびに PC 上で cmake を実行して設定ヘッダー(`config.h`)を生成するためです。CMake が C コンパイラを見つけられないと、ここでビルドが止まります。Windows なら Visual Studio Build Tools を入れておくと確実です。
+PlatformIO でビルドするときは、PC に CMake と C/C++ のコンパイラが必要です。zenoh-pico のビルドスクリプト(`extra_script.py`)が、ビルドのたびに PC 上で cmake を実行して設定ヘッダー(`config.h`)を生成するためです。Arduino ESP32 向けの設定では C++ も有効になるので、C++ のコンパイラが見つからないと、ここでビルドが止まります。Windows なら Visual Studio Build Tools(C++ によるデスクトップ開発)を入れておくと確実です。
+
+Arduino ESP32 向けのビルドでは、zenoh-pico が C99 として扱われ、`z_loan` や `z_move` などのマクロが使えません。サンプルの main.cpp は、`z_session_loan(&s)` のような型ごとの関数で書いています。テンプレートの設定でビルドすると、RAM の使用量は 44,816 バイト(13.7%)、フラッシュは 820,817 バイト(62.6%)でした。
 
 サンプルの [main.cpp](../pico/esp32/src/main.cpp) は、Wi-Fi に接続したあと client モードでルーターにつなぎ、`demo/hello/esp32` に状態を JSON で 1 秒ごとに publish します。同時に `demo/esp32/led` を購読していて、`on` を受け取ると LED を点けます。PC からは次のように操作できます(`--raw` は通し番号を付けずに送るオプションです)。
 
@@ -316,6 +320,8 @@ zenoh-bridge-ros2dds -e tcp/<ロボットのIP>:7447
 ```
 
 このとき、ブリッジでつないだホストのあいだを DDS の通信が直接流れないようにします。DDS とブリッジの両方を通って同じデータが届き、重複やループが起きるためです。ブリッジの README には、`ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST`(Iron 以降)を使う、ホストごとに `ROS_DOMAIN_ID` を変える、CycloneDDS の設定で使うネットワークインターフェースを限定する、という 3 つの方法が載っています。
+
+ブリッジは、`ROS_DISTRO` 環境変数を見て Iron より前のディストリビューションかどうかを判断します。ROS 2 の環境を読み込んだシェルなら設定済みですが、Docker イメージや単体の実行ファイルで動かすときは未設定になりがちです。未設定だと iron とみなして警告を出すので、`ROS_DISTRO=humble` のように明示しておきます。
 
 ロボットが複数台あるときは、ブリッジの設定で namespace を付けます。namespace を `/bot1` にすると、ロボットの `/cmd_vel` は Zenoh 上で `bot1/cmd_vel` になるので、ROS 2 ノードの側で namespace を設定しなくても名前がぶつかりません。`/tf` や `/rosout` のような絶対名のトピックにも namespace が付く点に注意してください。
 
@@ -428,7 +434,8 @@ uv run ros2_rmw_zenoh.py talk
 | client でセッションを開けない | ルーターが起動していないか、ファイアウォールで 7447/tcp が閉じている。Windows でルーターを動かすなら、受信の許可が要る |
 | 関数名や引数が記事と合わない | 0.x 系の情報を見ている。使っているバージョンのタグの公式サンプルを参照する |
 | マイコンで `z_open` が失敗する | バッファが大きすぎてメモリが足りない。`BATCH_UNICAST_SIZE` などを小さくする |
-| PlatformIO のビルドが cmake の段階で止まる | PC に CMake か C コンパイラがない |
+| PlatformIO のビルドが cmake の段階で止まる | PC に CMake か C/C++ のコンパイラがない(Arduino ESP32 向けは C++ も要る) |
+| Arduino で `z_loan` や `z_move` が未定義になる | C99 扱いのビルドでは汎用マクロが定義されない。`z_session_loan` のような型ごとの関数を使う |
 | ROS 2 のデータが重複して届く | ブリッジと DDS の両方で、ホスト間に同じデータが流れている。DDS の通信をホストの中に閉じる |
 | rmw_zenoh でノードが互いに見えない | `rmw_zenohd` が起動していない。または別の RMW のデーモンが残っている(`ros2 daemon stop`) |
 | Humble と Jazzy の rmw_zenoh がつながらない | キーに型ハッシュが入るかどうかが違う。ディストリビューションをそろえる |

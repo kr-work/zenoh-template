@@ -5,18 +5,21 @@
 
 static volatile int g_queries = 0;
 
+// ctx には main で作ったキー式(このキューリブルのキー)へのポインターを渡している
 static void on_query(z_loaned_query_t *query, void *ctx) {
-    (void)ctx;
+    const z_view_keyexpr_t *own_key = (const z_view_keyexpr_t *)ctx;
+
     z_view_string_t key;
     z_keyexpr_as_view_string(z_query_keyexpr(query), &key);
     printf("<- query: %.*s\n", (int)z_string_len(z_loan(key)), z_string_data(z_loan(key)));
 
     char buf[64];
-    snprintf(buf, sizeof(buf), "pico queryable, queries=%d", ++g_queries);
+    snprintf(buf, sizeof(buf), "pico queryable, queries=%d", g_queries + 1);
     z_owned_bytes_t reply;
     z_bytes_copy_from_str(&reply, buf);
-    // 応答のキーは、問い合わせのキー式と重なっていればよい。ここでは問い合わせのキーをそのまま返す
-    z_query_reply(query, z_query_keyexpr(query), z_move(reply), NULL);
+    // 応答のキーは問い合わせのキー式と重なっていればよい。ここでは自分のキー(例: demo/info/pico)で返す
+    z_query_reply(query, z_loan(*own_key), z_move(reply), NULL);
+    g_queries++;
 }
 
 int main(int argc, char **argv) {
@@ -36,7 +39,7 @@ int main(int argc, char **argv) {
     }
 
     z_owned_closure_query_t callback;
-    z_closure(&callback, on_query, NULL, NULL);
+    z_closure(&callback, on_query, NULL, (void *)&ke);
     z_owned_queryable_t qable;
     if (z_declare_queryable(z_loan(s), &qable, z_loan(ke), z_move(callback), NULL) < 0) {
         fprintf(stderr, "Unable to declare queryable\n");
@@ -48,6 +51,8 @@ int main(int argc, char **argv) {
     while (args.count == 0 || g_queries < args.count) {
         z_sleep_ms(100);
     }
+    // 最後の応答が送り出されるまで少し待ってから閉じる
+    z_sleep_ms(200);
 
     z_drop(z_move(qable));
     z_drop(z_move(s));
