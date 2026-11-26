@@ -124,7 +124,7 @@ import zenoh
 conf = zenoh.Config.from_file("../config/client.json5")
 with zenoh.open(conf) as session:
     pub = session.declare_publisher("demo/hello/python")
-    pub.put("Hello from Python")
+    pub.put("Hello from Python", encoding=zenoh.Encoding.TEXT_PLAIN)
 ```
 
 受信側は、サンプルが届くたびに呼ばれる関数を登録します([python/sub.py](../python/sub.py))。
@@ -199,7 +199,7 @@ zenoh-pico の API を読むときに押さえておきたいのは、値の持�
 | `z_loaned_xxx_t` | 借りている参照 | `z_loan(x)` で作って関数に渡す。所有権は移らない |
 | `z_moved_xxx_t` | 所有権を渡す途中の値 | `z_move(x)` で作る。渡したあとの `x` は使わない |
 
-このほかに、文字列などをコピーせずに参照する `z_view_xxx_t`(例:`z_view_keyexpr_t`)があります。`z_loan` や `z_move` は、C11 の `_Generic` で型ごとの関数に振り分けるマクロです。C++ 向けには同じ名前のオーバーロード関数が用意されています。ただし、これらは C99 でビルドする環境では定義されません。PlatformIO の Arduino ESP32 ビルドがこれに当たるので、その場合は `z_session_loan(&s)` や `z_bytes_move(&payload)` のように、型ごとの関数を直接呼びます。
+このほかに、文字列などをコピーせずに参照する `z_view_xxx_t`(例:`z_view_keyexpr_t`)があります。`z_loan` や `z_move` は、C11 の `_Generic` で型ごとの関数に振り分けるマクロです。C++ 向けには同じ名前のオーバーロード関数が用意されています。ただし、`ZENOH_C_STANDARD=99` が定義されていると、C 向けのマクロも C++ 向けの関数もまとめて無効になります。PlatformIO の Arduino ESP32 向けのビルドでは、zenoh-pico のビルドスクリプトがこの値を定義するので、`z_session_loan(&s)` や `z_bytes_move(&payload)` のように、型ごとの関数を直接呼びます。
 
 publish の流れは次のとおりです([pico/desktop/src/pico_pub.c](../pico/desktop/src/pico_pub.c) を短くしたもの)。
 
@@ -230,7 +230,7 @@ z_drop(z_move(s));
 
 ### 古い記事との違い:受信タスクは z_open が始める
 
-0.x 系の記事やサンプルでは、セッションを開いたあとに `zp_start_read_task` と `zp_start_lease_task` を呼び、受信とキープアライブのタスクを自分で起動していました。1.10.2 では、マルチスレッド対応でビルドしていれば(`Z_FEATURE_MULTI_THREAD=1`、既定値)、これらのタスクは `z_open` の中で自動的に始まります。`z_open` のオプションにある `auto_start_read_task` などの項目も非推奨になりました。シングルスレッドでビルドした場合の書き方は、zenoh-pico のサンプルの `z_pub_st.c` と `z_sub_st.c` にあります。
+0.x 系と、1.6 までの 1.x 系の記事やサンプルでは、セッションを開いたあとに `zp_start_read_task` と `zp_start_lease_task` を呼び、受信とキープアライブのタスクを自分で起動していました(公式のサンプルは 1.8 まで呼んでいます)。1.7 からは、マルチスレッド対応でビルドしていれば(`Z_FEATURE_MULTI_THREAD=1`、既定値)、これらのタスクは `z_open` の中で自動的に始まります。1.10.2 では、これらの関数と、`z_open` のオプションにある `auto_start_read_task` などの項目は非推奨です。呼んでも害はありません。シングルスレッドでビルドした場合の書き方は、zenoh-pico のサンプルの `z_pub_st.c` と `z_sub_st.c` にあります。
 
 ペイロードの渡し方も変わりました。0.x 系ではポインターと長さを渡していましたが、1.x 系では `z_owned_bytes_t` に入れて渡します。
 
@@ -313,7 +313,7 @@ ROS 2 と Zenoh をつなぐ方法は 2 つあります。ROS 2 は DDS のま�
 | 別に動かすもの | ブリッジ(既定でルーターとして 7447/tcp で待ち受ける) | Zenoh ルーター(`rmw_zenohd`) |
 | `/chatter` に対応するキー | `chatter` | `0/chatter/std_msgs::msg::dds_::String_/RIHS01_df66…` |
 | ペイロード | CDR | CDR と添付データ(シーケンス番号、送信時刻、GID) |
-| 素の Zenoh やマイコンからの参加 | キーと CDR を合わせれば足りる | 型ハッシュ入りのキーと添付データが要る |
+| 素の Zenoh やマイコンからの参加 | キーと CDR を合わせれば足りる | 受信はワイルドカードで済む。送信には型ハッシュ入りのキーと添付データが要る |
 | 向いている構成 | ロボットの中は DDS のまま、外とやり取りする通信だけ Zenoh にする | ROS 2 の通信全体を Zenoh にする |
 
 ROS 2 のライブラリを使わない素の Zenoh のアプリやマイコンを ROS 2 と混ぜるなら、扱いが簡単なのはブリッジです。ROS 2 の構成全体を Zenoh に移すなら rmw_zenoh を選びます。
@@ -456,7 +456,7 @@ uv run ros2_rmw_zenoh.py talk
 
 キーの先頭の `demo/` は、プロジェクトの名前に置き換えます。キーは `/` 区切りの階層なので、`<プロジェクト>/<装置>/<データの種類>` のように決めておくと、ワイルドカードでまとめて購読できます。
 
-Zenoh のバージョンは、Python・Rust・zenoh-pico・Docker イメージのすべてで 1.10.2 に固定しています。上げるときは README の「バージョンを上げるとき」にある箇所をそろえて変えます。
+Zenoh のバージョンは、Python・Rust・zenoh-pico・Zenoh の Docker イメージで 1.10.2 に固定しています(rmw_zenoh の構成は、ROS 2 のパッケージに含まれる Zenoh を使います)。上げるときは README の「バージョンを上げるとき」にある箇所をそろえて変えます。
 
 `.github/workflows/ci.yml` は、Python のスモークテスト、Rust のビルド、zenoh-pico の PC 向けビルド(Linux と Windows)、ESP32 向けのビルドを実行します。使わない言語のジョブは削除してください。
 

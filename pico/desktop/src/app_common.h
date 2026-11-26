@@ -53,7 +53,8 @@ static void app_parse_args(int argc, char **argv, app_args_t *args) {
 }
 
 // 設定を組み立ててセッションを開く。成功なら 0。
-// zenoh-pico 1.x では、マルチスレッド版ならば受信やキープアライブのタスクが z_open の中で自動的に始まる。
+// zenoh-pico 1.7 以降は、マルチスレッド版ならば受信やキープアライブのタスクが z_open の中で自動的に始まる。
+// (1.6 以前は、z_open のあとに zp_start_read_task / zp_start_lease_task を自分で呼ぶ必要があった)
 static int app_open_session(z_owned_session_t *session, const app_args_t *args) {
     z_owned_config_t config;
     z_config_default(&config);

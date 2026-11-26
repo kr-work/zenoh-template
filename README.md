@@ -141,9 +141,11 @@ Zenoh のバージョンは次の箇所で 1.10.2 に固定しています。上
 - `ros2/rmw_zenoh/`:`ros2_rmw_zenoh.py` の graph・listen・talk が動き、talk の送信を ROS 2 の listener が受信する
 - Rust は `cargo build --release` と `cargo clippy -- -D warnings` が通る
 - `pico/esp32` は `build.ps1`(Docker の中の PlatformIO 6.2.0)で `esp32dev` 向けのビルドが通る(RAM 13.7%、Flash 62.6%)。`flash.ps1` は Windows の esptool 5.7.0 まで引数が渡ることを確認した
+- GitHub Actions で、Python のスモークテスト、Rust のビルド、zenoh-pico の Linux と Windows(MSVC)でのビルド、ESP32 向けのビルドがすべて通る
+- GitHub から clone した状態で、README と解説の手順どおりに上記を再現できる
 
 確認していないこと:
 
 - ESP32 の実機での動作(書き込みと Wi-Fi 接続)
-- `pico/desktop` の Windows(MSVC)でのビルド
-- GitHub Actions 上での CI の実行
+- macOS と Linux のホストでの `pico/esp32/build.sh` と書き込み
+- ESP32-C3・C6・S3 など、`esp32dev` 以外のボード
