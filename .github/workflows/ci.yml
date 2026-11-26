@@ -10,6 +10,9 @@ jobs:
     defaults:
       run:
         working-directory: python
+    env:
+      # ログをファイルにリダイレクトしても、出力を溜めずにすぐ書き出す
+      PYTHONUNBUFFERED: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
@@ -18,12 +21,16 @@ jobs:
       - name: pub/sub と get/queryable のスモークテスト
         run: |
           uv run sub.py -l tcp/127.0.0.1:7450 --no-multicast-scouting > sub.log 2>&1 &
+          SUB_PID=$!
           uv run queryable.py -l tcp/127.0.0.1:7451 --no-multicast-scouting > q.log 2>&1 &
+          Q_PID=$!
           sleep 3
           uv run pub.py -e tcp/127.0.0.1:7450 --no-multicast-scouting -n 3 --interval 0.5
           uv run get.py -e tcp/127.0.0.1:7451 --no-multicast-scouting -t 3 | tee get.log
           sleep 1
-          cat sub.log
+          kill $SUB_PID $Q_PID || true
+          echo "--- sub.log"; cat sub.log
+          echo "--- q.log"; cat q.log
           grep -q "Hello from Python" sub.log
           grep -q "python queryable" get.log
 

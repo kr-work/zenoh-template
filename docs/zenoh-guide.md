@@ -271,7 +271,17 @@ build_flags = -DZENOH_COMPILER_GCC
 
 `lib_ldf_mode = deep` と `-DZENOH_COMPILER_GCC` は、zenoh-pico の Arduino 向け CI と同じ設定です。espressif32 のバージョンは、zenoh-pico の ESP-IDF 向け CI が 6.13.0 に固定しているのに合わせました。CI のコメントによると、espressif32 7.0.0 が持ち込む ESP-IDF 6.0 で PlatformIO との組み合わせに問題が出るためです。
 
-PlatformIO でビルドするときは、PC に CMake と C/C++ のコンパイラが必要です。zenoh-pico のビルドスクリプト(`extra_script.py`)が、ビルドのたびに PC 上で cmake を実行して設定ヘッダー(`config.h`)を生成するためです。Arduino ESP32 向けの設定では C++ も有効になるので、C++ のコンパイラが見つからないと、ここでビルドが止まります。Windows なら Visual Studio Build Tools(C++ によるデスクトップ開発)を入れておくと確実です。
+PlatformIO を PC に直接入れてビルドするときは、PC に CMake と C/C++ のコンパイラも必要です。zenoh-pico のビルドスクリプト(`extra_script.py`)が、ビルドのたびに PC 上で cmake を実行して設定ヘッダー(`config.h`)を生成するためです。Arduino ESP32 向けの設定では C++ も有効になるので、C++ のコンパイラが見つからないと、ここでビルドが止まります。Windows なら Visual Studio Build Tools(C++ によるデスクトップ開発)を入れておくと確実です。
+
+これらを PC に入れたくない場合のために、テンプレートには Docker の中でビルドするスクリプトを用意しました。コンテナに PlatformIO・CMake・gcc/g++ が入っているので、Windows 側に要るのは Docker と uv だけです。
+
+```powershell
+cd pico/esp32
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+powershell -ExecutionPolicy Bypass -File .\flash.ps1 -Port COM5 -Monitor
+```
+
+書き込みだけは Windows 側で行います。Windows の Docker Desktop からは USB シリアル(COM ポート)を直接使えないためです。`build.ps1` は、ブートローダー・パーティションテーブル・アプリを 1 つにまとめた `dist\esp32dev\firmware_merged.bin` を作ります。まとめる処理は、PlatformIO の追加スクリプト([scripts/merge_bin.py](../pico/esp32/scripts/merge_bin.py))に `mergebin` というターゲットとして書いてあります。このファイルはアドレス 0x0 に書き込めばよいので、`flash.ps1` は uv で取得した esptool を `esptool --chip esp32 --port COM5 write-flash 0x0 firmware_merged.bin` の形で呼ぶだけです。PlatformIO のツールチェーンとビルド結果は Docker のボリュームに残るので、初回は 2 分ほどかかったビルドが、2 回目は 8 秒で終わりました。
 
 Arduino ESP32 向けのビルドでは、zenoh-pico が C99 として扱われ、`z_loan` や `z_move` などのマクロが使えません。サンプルの main.cpp は、`z_session_loan(&s)` のような型ごとの関数で書いています。テンプレートの設定でビルドすると、RAM の使用量は 44,816 バイト(13.7%)、フラッシュは 820,817 バイト(62.6%)でした。
 
@@ -434,7 +444,7 @@ uv run ros2_rmw_zenoh.py talk
 | client でセッションを開けない | ルーターが起動していないか、ファイアウォールで 7447/tcp が閉じている。Windows でルーターを動かすなら、受信の許可が要る |
 | 関数名や引数が記事と合わない | 0.x 系の情報を見ている。使っているバージョンのタグの公式サンプルを参照する |
 | マイコンで `z_open` が失敗する | バッファが大きすぎてメモリが足りない。`BATCH_UNICAST_SIZE` などを小さくする |
-| PlatformIO のビルドが cmake の段階で止まる | PC に CMake か C/C++ のコンパイラがない(Arduino ESP32 向けは C++ も要る) |
+| PlatformIO のビルドが cmake の段階で止まる | PC に CMake か C/C++ のコンパイラがない(Arduino ESP32 向けは C++ も要る)。入れたくなければ `build.ps1` で Docker の中でビルドする |
 | Arduino で `z_loan` や `z_move` が未定義になる | C99 扱いのビルドでは汎用マクロが定義されない。`z_session_loan` のような型ごとの関数を使う |
 | ROS 2 のデータが重複して届く | ブリッジと DDS の両方で、ホスト間に同じデータが流れている。DDS の通信をホストの中に閉じる |
 | rmw_zenoh でノードが互いに見えない | `rmw_zenohd` が起動していない。または別の RMW のデーモンが残っている(`ros2 daemon stop`) |

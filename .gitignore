@@ -14,6 +14,7 @@ build/
 
 # PlatformIO (zenoh-pico ESP32)
 pico/esp32/.pio/
+pico/esp32/dist/
 pico/esp32/include/secrets.h
 
 # Editors / OS

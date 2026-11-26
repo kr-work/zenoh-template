@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 
 import zenoh
 
@@ -41,6 +42,11 @@ def add_config_arguments(parser: argparse.ArgumentParser) -> None:
 
 
 def config_from_args(args: argparse.Namespace) -> zenoh.Config:
+    # 出力をファイルやパイプにリダイレクトすると、Python は出力をまとめて溜めてから書き出す。
+    # 受信のたびに表示が出るよう、1 行ごとに書き出す設定にしておく(CI でログを確かめるときにも要る)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(line_buffering=True)
+
     conf = zenoh.Config.from_file(args.config) if args.config else zenoh.Config()
     # insert_json5 には「キーのパス」と「JSON5 として解釈できる文字列」を渡す
     if args.mode:

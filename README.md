@@ -20,6 +20,8 @@ zenoh-template/
 ├── pico/
 │   ├── desktop/              zenoh-pico を PC 向けに CMake でビルドする
 │   └── esp32/                zenoh-pico を ESP32 で動かす PlatformIO プロジェクト
+│       ├── build.ps1         Docker の中でビルドする(build.sh は macOS / Linux 用)
+│       └── flash.ps1         Windows の esptool で書き込む
 ├── ros2/
 │   ├── docker/Dockerfile     ROS 2 Jazzy + rmw_cyclonedds + rmw_zenoh のイメージ
 │   ├── bridge/               DDS の ROS 2 と zenoh-bridge-ros2dds の構成
@@ -74,13 +76,35 @@ zenoh-template/
 | `python/` | pub/sub、get/queryable | `uv run sub.py -k 'demo/**'` |
 | `rust/` | 同じ 4 種類を Rust で | `cargo run --bin sub -- -e tcp/127.0.0.1:7447` |
 | `pico/desktop/` | zenoh-pico の pub/sub、queryable、ROS 2 の Twist 送信 | `cmake -B build`、`cmake --build build` のあと `./build/pico_sub -e tcp/127.0.0.1:7447` |
-| `pico/esp32/` | ESP32 から状態を publish し、LED の指令を購読 | `include/secrets.h` を用意して `pio run -t upload` |
+| `pico/esp32/` | ESP32 から状態を publish し、LED の指令を購読 | `include/secrets.h` を用意して `.\build.ps1` → `.\flash.ps1 -Port COM5` |
 | `ros2/bridge/` | DDS の ROS 2 ノード + zenoh-bridge-ros2dds | `docker compose up --build` のあと `uv run ros2_bridge.py listen` |
 | `ros2/rmw_zenoh/` | rmw_zenoh の ROS 2 ノード + rmw_zenohd | `docker compose up --build` のあと `uv run ros2_rmw_zenoh.py graph` |
 
 `pico/desktop` は Windows でもビルドできます(Visual Studio の C コンパイラと CMake が必要です)。生成された実行ファイルは `build\Debug\pico_sub.exe` のように構成名のフォルダーに入ります。
 
-`pico/esp32` のビルドにも、PC 側に CMake と C/C++ のコンパイラが要ります。zenoh-pico のビルドスクリプトが、ビルドのたびに PC 上で cmake を実行して設定ヘッダーを生成するためです。
+### ESP32 のビルドと書き込み
+
+ESP32 のファームウェアは、Docker の中でビルドして Windows から書き込めます。PC に PlatformIO・CMake・コンパイラを入れる必要はありません。Windows の Docker Desktop からは USB シリアル(COM ポート)を直接使えないので、書き込みだけは Windows 側の esptool で行います。esptool は uv が実行時に取得します。
+
+1. `pico/esp32/include/secrets.example.h` を `secrets.h` にコピーし、Wi-Fi の SSID・パスワードとルーターのアドレスを書きます。
+2. Docker の中でビルドします。初回はツールチェーンの取得で 2 分ほどかかり、2 回目以降は数秒から数十秒です。
+
+   ```powershell
+   cd pico/esp32
+   powershell -ExecutionPolicy Bypass -File .\build.ps1
+   ```
+
+   `dist\esp32dev\firmware_merged.bin` ができます。ブートローダー・パーティションテーブル・アプリを 1 つにまとめたファイルで、アドレス 0x0 に書き込みます。
+
+3. ESP32 を USB でつなぎ、書き込みます。`-Port` を省くと、見つかったシリアルポートの一覧を表示します。
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\flash.ps1 -Port COM5 -Monitor
+   ```
+
+   `-Monitor` を付けると、書き込みのあとにシリアル出力を表示します(Ctrl+] で終了)。
+
+PlatformIO を PC に直接入れて `pio run -t upload` で書き込むこともできます。その場合は、PC に CMake と C/C++ のコンパイラも要ります。zenoh-pico のビルドスクリプトが、ビルドのたびに PC 上で cmake を実行して設定ヘッダーを生成するためです。Windows なら Visual Studio Build Tools(C++ によるデスクトップ開発)を入れてください。
 
 ## ROS 2 とつなぐ
 
@@ -111,12 +135,12 @@ Zenoh のバージョンは次の箇所で 1.10.2 に固定しています。上
 
 確認したこと:
 
-- Python・Rust・zenoh-pico(Linux でビルド)のあいだで、ルーター経由の pub/sub と get/queryable が双方向に通る
+- Python・Rust・zenoh-pico(Linux でビルド)のあいだで、ルーター経由の pub/sub と get/queryable で、どちらの向きにもデータが届く
 - ルーターの REST プラグインとメモリストレージが起動し、`curl http://localhost:8000/demo/hello/**` で最新値が返る
 - `ros2/bridge/`:ROS 2 Jazzy(CycloneDDS)の talker → Zenoh、Zenoh → listener、Zenoh(Python と zenoh-pico)→ `/cmd_vel` が届く
 - `ros2/rmw_zenoh/`:`ros2_rmw_zenoh.py` の graph・listen・talk が動き、talk の送信を ROS 2 の listener が受信する
 - Rust は `cargo build --release` と `cargo clippy -- -D warnings` が通る
-- `pico/esp32` は PlatformIO で `esp32dev` 向けのビルドが通る(RAM 13.7%、Flash 62.6%)
+- `pico/esp32` は `build.ps1`(Docker の中の PlatformIO 6.2.0)で `esp32dev` 向けのビルドが通る(RAM 13.7%、Flash 62.6%)。`flash.ps1` は Windows の esptool 5.7.0 まで引数が渡ることを確認した
 
 確認していないこと:
 
